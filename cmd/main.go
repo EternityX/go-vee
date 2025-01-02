@@ -35,28 +35,33 @@ func corsMiddleware(next http.Handler) http.Handler {
 func main() {
 	var apiKeyFlag string
 	var portFlag string
+	var lanFlag bool
 
 	flag.StringVar(&apiKeyFlag, "api-key", "", "Govee API key")
 	flag.StringVar(&portFlag, "port", "", "Port to listen on")
+	flag.BoolVar(&lanFlag, "lan", true, "Enable LAN discovery (default: true)")
 	flag.Parse()
 
 	apiKey := apiKeyFlag
 	if apiKey == "" {
 		apiKey = os.Getenv("GOVEE_API_KEY")
-		if apiKey == "" {
-			log.Fatal("Govee API key is required. Provide it via -api-key flag or GOVEE_API_KEY environment variable")
-		}
 	}
 
-	goveeService := service.NewGoveeService(apiKey)
+	// Only require API key if LAN mode is disabled
+	if !lanFlag && apiKey == "" {
+		log.Fatal("Govee API key is required when LAN mode is disabled. Provide it via -api-key flag or GOVEE_API_KEY environment variable")
+	}
+
+	goveeService := service.NewGoveeService(apiKey, lanFlag)
 	goveeHandler := handlers.NewGoveeHandler(goveeService)
 
 	mux := http.NewServeMux()
-	
+
 	// Handle devices endpoint
 	mux.HandleFunc("/api/v1/devices", goveeHandler.HandleDevices)
 	mux.HandleFunc("/api/v1/devices/control", goveeHandler.HandleControl)
-	
+	mux.HandleFunc("/api/v1/devices/lan", goveeHandler.HandleLANDevices)
+
 	// Apply middleware
 	handler := corsMiddleware(loggingMiddleware(mux))
 
@@ -74,6 +79,7 @@ func main() {
 	}
 
 	log.Printf("Server starting on port %s", port)
+	log.Printf("LAN Discovery: %t", lanFlag)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}

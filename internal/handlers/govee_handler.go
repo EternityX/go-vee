@@ -6,8 +6,10 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/EternityX/go-vee/internal/service"
+	"github.com/EternityX/go-vee/internal/service/lan"
 )
 
 type GoveeHandler struct {
@@ -41,14 +43,16 @@ func (h *GoveeHandler) HandleDevices(w http.ResponseWriter, r *http.Request) {
 		sendErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed, "Only GET method is allowed for this endpoint")
 		return
 	}
-	
+
 	devices, err := h.service.GetDevices(r.Context())
 	if err != nil {
 		log.Printf("Error fetching devices: %v", err)
+
 		description := "Failed to fetch devices from Govee API"
 		if strings.Contains(err.Error(), "Govee API returned status") {
 			description = err.Error()
 		}
+
 		sendErrorResponse(w, "Internal server error", http.StatusInternalServerError, description)
 		return
 	}
@@ -88,7 +92,7 @@ func (h *GoveeHandler) HandleControl(w http.ResponseWriter, r *http.Request) {
 		sendErrorResponse(w, "Bad request", http.StatusBadRequest, "Failed to read request body")
 		return
 	}
-	
+
 	log.Printf("Received control request: %s", string(body))
 
 	if err := json.Unmarshal(body, &controlRequest); err != nil {
@@ -115,6 +119,7 @@ func (h *GoveeHandler) HandleControl(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), "govee api") {
 			description = err.Error()
 		}
+
 		sendErrorResponse(w, "Internal server error", http.StatusInternalServerError, description)
 		return
 	}
@@ -125,6 +130,35 @@ func (h *GoveeHandler) HandleControl(w http.ResponseWriter, r *http.Request) {
 	}{
 		Success: true,
 		Message: "Device control command sent successfully",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding response: %v", err)
+		sendErrorResponse(w, "Internal server error", http.StatusInternalServerError, "Failed to encode response")
+		return
+	}
+}
+
+func (h *GoveeHandler) HandleLANDevices(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		sendErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed, "Only GET method is allowed for this endpoint")
+		return
+	}
+
+	devices, err := lan.DiscoverDevices(2 * time.Second)
+	if err != nil {
+		log.Printf("Error discovering LAN devices: %v", err)
+		sendErrorResponse(w, "Internal server error", http.StatusInternalServerError, "Failed to discover LAN devices")
+		return
+	}
+
+	response := struct {
+		Success bool               `json:"success"`
+		Data    []lan.ScanResponse `json:"data"`
+	}{
+		Success: true,
+		Data:    devices,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

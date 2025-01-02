@@ -8,7 +8,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/EternityX/go-vee/internal/service/lan"
 	"github.com/google/uuid"
 )
 
@@ -30,6 +32,7 @@ type GoveeService struct {
 	client  *http.Client
 	apiKey  string
 	baseURL string
+	useLAN  bool
 }
 
 type CapabilityParameter struct {
@@ -45,10 +48,10 @@ type CapabilityParameter struct {
 		Precision int `json:"precision"`
 	} `json:"range,omitempty"`
 	Fields []struct {
-		FieldName    string `json:"fieldName"`
-		DataType     string `json:"dataType"`
-		Required     bool   `json:"required"`
-		Size         *struct {
+		FieldName string `json:"fieldName"`
+		DataType  string `json:"dataType"`
+		Required  bool   `json:"required"`
+		Size      *struct {
 			Min int `json:"min"`
 			Max int `json:"max"`
 		} `json:"size,omitempty"`
@@ -85,8 +88,8 @@ type Device struct {
 }
 
 type DeviceResponse struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int      `json:"code"`
+	Message string   `json:"message"`
 	Data    []Device `json:"data"`
 }
 
@@ -101,6 +104,12 @@ type ControlPayload struct {
 	Capability ControlCapability `json:"capability"`
 }
 
+type RGBColor struct {
+	R int `json:"r"`
+	G int `json:"g"`
+	B int `json:"b"`
+}
+
 type ControlCapability struct {
 	Type     string      `json:"type"`
 	Instance string      `json:"instance"`
@@ -112,14 +121,16 @@ type ControlResponse struct {
 	Message string `json:"message"`
 }
 
-func NewGoveeService(apiKey string) *GoveeService {
+func NewGoveeService(apiKey string, useLAN bool) *GoveeService {
 	return &GoveeService{
 		client:  &http.Client{},
 		apiKey:  apiKey,
 		baseURL: "https://openapi.api.govee.com",
+		useLAN:  useLAN,
 	}
 }
 
+// Fetches devices from the Govee cloud API
 func (s *GoveeService) GetDevices(ctx context.Context) ([]Device, error) {
 	url := s.baseURL + "/router/api/v1/user/devices"
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -161,7 +172,53 @@ func (s *GoveeService) GetDevices(ctx context.Context) ([]Device, error) {
 	return deviceResp.Data, nil
 }
 
+// Controls a device using either LAN or the Govee cloud API
 func (s *GoveeService) ControlDevice(ctx context.Context, sku string, deviceID string, capability ControlCapability) error {
+	if s.useLAN {
+		devices, err := lan.DiscoverDevices(2 * time.Second)
+		if err == nil {
+			// Look for matching device
+			for _, device := range devices {
+				if device.Msg.Data.Device == deviceID {
+					// Found device on LAN, try to control it
+					var err error
+
+					switch capability.Type {
+					case "devices.capabilities.on_off":
+						if val, ok := capability.Value.(float64); ok {
+							if val == 1 {
+								err = lan.TurnOn(device.Msg.Data.IP)
+							} else {
+								err = lan.TurnOff(device.Msg.Data.IP)
+							}
+						}
+					case "devices.capabilities.range":
+						if val, ok := capability.Value.(float64); ok {
+							err = lan.SetBrightness(device.Msg.Data.IP, int(val))
+						}
+					case "devices.capabilities.color_setting":
+						if colorInt, ok := capability.Value.(float64); ok {
+							r := int((uint32(colorInt) >> 16) & 0xFF)
+							g := int((uint32(colorInt) >> 8) & 0xFF)
+							b := int(uint32(colorInt) & 0xFF)
+
+							err = lan.SetColor(device.Msg.Data.IP, r, g, b)
+						}
+					}
+
+					if err == nil {
+						log.Printf("Successfully controlled device %s via LAN", deviceID)
+						return nil
+					}
+					log.Printf("Failed to control device via LAN, falling back to cloud API: %v", err)
+				}
+			}
+		} else {
+			log.Printf("Failed to discover LAN devices, falling back to cloud API: %v", err)
+		}
+	}
+
+	// Fall back to cloud API
 	url := s.baseURL + "/router/api/v1/device/control"
 
 	// Validate capability
@@ -223,7 +280,6 @@ func (s *GoveeService) ControlDevice(ctx context.Context, sku string, deviceID s
 	}
 
 	log.Printf("Successfully controlled device %s", deviceID)
+
 	return nil
 }
-
-	
