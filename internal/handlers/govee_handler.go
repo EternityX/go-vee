@@ -36,24 +36,6 @@ func sendErrorResponse(w http.ResponseWriter, message string, code int, descript
 	})
 }
 
-func (h *GoveeHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		sendErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	// Parse webhook payload
-	var payload map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		log.Printf("Error decoding webhook payload: %v", err)
-		sendErrorResponse(w, "Bad request", http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	// Log the webhook payload for now
-	log.Printf("Received webhook: %+v", payload)
-}
-
 func (h *GoveeHandler) HandleDevices(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		sendErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed, "Only GET method is allowed for this endpoint")

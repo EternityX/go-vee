@@ -56,8 +56,7 @@ func main() {
 	// Handle devices endpoint
 	mux.HandleFunc("/api/v1/devices", goveeHandler.HandleDevices)
 	mux.HandleFunc("/api/v1/devices/control", goveeHandler.HandleControl)
-	mux.HandleFunc("/webhook", goveeHandler.HandleWebhook)
-
+	
 	// Apply middleware
 	handler := corsMiddleware(loggingMiddleware(mux))
 
