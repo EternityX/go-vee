@@ -41,7 +41,7 @@ Set brightness to 50%
 ```json
 {
   "sku": "H6022",
-  "device": "1A:4F:DB:B9:86:46:16:2B",
+  "device": "XX:XX:XX:XX:XX:XX:XX:XX",
   "capability": {
     "type": "devices.capabilities.range",
     "instance": "brightness",
@@ -55,7 +55,7 @@ Set the color to red
 ```json
 {
   "sku": "H6022",
-  "device": "1A:4F:DB:B9:86:46:16:2B",
+  "device": "XX:XX:XX:XX:XX:XX:XX:XX",
   "capability": {
     "type": "devices.capabilities.color_setting",
     "instance": "colorRgb",
